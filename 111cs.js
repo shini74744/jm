@@ -279,12 +279,6 @@ html.dark body {
       // PC端背景资源
       const pcMediaSources = [
         { type: 'video', src: 'https://tc.shni.cc/api/pcapi.php' },
-        { type: 'video', src: 'http://api.mmp.cc/api/ksvideo?type=mp4&id=BianZhuang' },
-        { type: 'video', src: 'https://tc.shni.cc/api/api.php' },
-        { type: 'image', src: 'https://api.lolimi.cn/API/meinv/api.php?type=image' },
-        { type: 'video', src: 'http://api.mmp.cc/api/shortvideo?type=mp4' },
-        { type: 'image', src: 'https://imgapi.xl0408.top/index.php' },
-        { type: 'video', src: 'https://t.alcy.cc/acg' },
       ];
       const randomPcSource = pcMediaSources[Math.floor(Math.random() * pcMediaSources.length)];
 
