@@ -243,7 +243,7 @@ html.dark body {
     // 针对中国用户设置背景资源（优先加载国内 CDN）
     if (isChinaUser) {
       const chinaMediaSources = [
-        { type: 'video', src: 'https://tc.shni.cc/api/api.php' },
+        { type: 'video', src: 'https://api.lolimi.cn/API/xjj/xjj.php' },
         
         { type: 'video', src: 'https://alimov2.a.kwimgs.com/upic/2024/06/04/17/BMjAyNDA2MDQxNzEzMDNfMzQ5MDQ0MzY2XzEzNDA5Mjg2MjA1OV8xXzM=_b_B7b0dd942b4114cceb5ca9967fe784572.mp4?clientCacheKey=3x537cqejzpttaa_b.mp4&tt=b&di=77270081&bp=13414' },
       ];
