@@ -13,7 +13,7 @@
   // 0. 判断是否是移动端（增强：iPadOS 桌面模式也算移动端）
   // -------------------------------
   const ua = navigator.userAgent || "";
-  const isIPadOS = /Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1; // iPadOS 桌面版 UA
+  const isIPadOS = /Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1;
   const isMobile =
     /Android|iPhone|iPad|iPod|Windows Phone|Mobi/i.test(ua) || isIPadOS;
 
@@ -35,29 +35,27 @@
     `;
     document.head.appendChild(style);
 
-    // 拦截长按触发的菜单（捕获阶段更稳）
     document.addEventListener(
       "contextmenu",
       (e) => {
         const t = e.target;
-        if (t && t.tagName && t.tagName.toLowerCase() === "img") {
-          e.preventDefault();
-        }
+        if (t && t.tagName && t.tagName.toLowerCase() === "img") e.preventDefault();
       },
       true
     );
 
-    return; // ✅ 移动端到此结束，不执行 PC 防护
+    return; // 移动端到此结束
   }
 
   // =====================================================================
-  // ✅ PC：防护（降误判版）
-  // - resize：不直接跳转，只用于更新基线
-  // - DevTools：用“基线 + 增量”判断，避免一进站就误判
+  // ✅ PC：防护（更稳版）
+  // - 仍保留快捷键拦截
+  // - DevTools 检测 =【基线增量】+【绝对差值/比例（用于开局已打开）】
+  // - 检测带“启用延迟”和“resize 后延迟”，减少误判
   // =====================================================================
 
   // -------------------------------
-  // 1. 禁用快捷键 (PC)
+  // 1. 禁用快捷键 (PC) —— 立刻触发
   // -------------------------------
   document.addEventListener("keydown", (e) => {
     if (
@@ -73,7 +71,7 @@
   });
 
   // -------------------------------
-  // 2. DevTools 检测（基线 + 增量）
+  // 2. DevTools 检测（基线 + 增量）——避免窗口化误判
   // -------------------------------
   let baseDiffH = null;
   let baseDiffW = null;
@@ -85,20 +83,22 @@
     baseDiffW = diffW;
   }
 
-  // 首次进入延迟采样（等浏览器 UI 稳定）
+  // 首次进入延迟采样（等 UI 稳定）
   setTimeout(sampleBaseline, 800);
 
-  // 窗口变化后也更新基线（避免窗口化/拖动后误判）
+  // resize 后也延迟重采样（用户窗口化/拖动不误判）
   let baselineTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(baselineTimer);
     baselineTimer = setTimeout(sampleBaseline, 800);
+    // resize 后暂时不做判定
+    devtoolsCheckEnabled = false;
+    clearTimeout(enableTimer);
+    enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 1200);
   });
 
   function isDevtoolsOpenByDelta() {
     if (baseDiffH === null || baseDiffW === null) return false;
-
-    // outer 在个别环境可能为 0/undefined，兜底
     if (!window.outerHeight || !window.outerWidth) return false;
 
     const diffH = Math.abs(window.outerHeight - window.innerHeight);
@@ -107,27 +107,61 @@
     const deltaH = diffH - baseDiffH;
     const deltaW = diffW - baseDiffW;
 
-    // 只看“增量”而不是绝对值，极大降低开局误判
+    // 只看“增量”，更稳
     return deltaH > 220 || deltaW > 220;
   }
 
-  let devtoolsHit = 0;
-  const HIT_NEED = 2; // 连续命中 2 次（约 1s）才处理
+  // -------------------------------
+  // 3. 新增：开局已打开 DevTools 的补充检测（绝对差值 + 比例）
+  //   - 不依赖基线（即使一开始就开着 DevTools 也能抓到）
+  //   - 用“差值很大 + viewport比例很小”双条件降低误伤
+  // -------------------------------
+  function isDevtoolsOpenByAbs() {
+    if (!window.outerHeight || !window.outerWidth) return false;
 
+    const diffH = Math.abs(window.outerHeight - window.innerHeight);
+    const diffW = Math.abs(window.outerWidth - window.innerWidth);
+
+    const hRatio = window.innerHeight / window.outerHeight; // viewport 占比
+    const wRatio = window.innerWidth / window.outerWidth;
+
+    // 典型：dock 底部/右侧时 diff 大且占比明显下降
+    const byH = diffH > 360 && hRatio < 0.78;
+    const byW = diffW > 360 && wRatio < 0.78;
+
+    return byH || byW;
+  }
+
+  // -------------------------------
+  // 4. 统一的处罚逻辑（连续命中才触发）
+  // -------------------------------
   function punish() {
     alert("检测到开发者工具已打开！");
     window.location.href = jumpUrl;
   }
 
-  setInterval(() => {
-    if (isDevtoolsOpenByDelta()) devtoolsHit++;
-    else devtoolsHit = 0;
+  let devtoolsCheckEnabled = false;
+  let enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 1200); // 页面稳定后再启用
 
-    if (devtoolsHit >= HIT_NEED) punish();
+  let hitDelta = 0;
+  let hitAbs = 0;
+
+  setInterval(() => {
+    if (!devtoolsCheckEnabled) return;
+
+    // 增量命中：2次（约1秒）触发
+    if (isDevtoolsOpenByDelta()) hitDelta++;
+    else hitDelta = 0;
+
+    // 绝对命中（开局已开 DevTools）：3次（约1.5秒）触发，稍微保守
+    if (isDevtoolsOpenByAbs()) hitAbs++;
+    else hitAbs = 0;
+
+    if (hitDelta >= 2 || hitAbs >= 3) punish();
   }, 500);
 
   // -------------------------------
-  // 3. 反调试 (PC)（保留你的逻辑：可能有性能影响）
+  // 5. 反调试 (PC)（保留你的逻辑：可能有性能影响）
   // -------------------------------
   function antiDebug() {
     setInterval(() => {
@@ -143,7 +177,7 @@
   } catch (err) {}
 
   // -------------------------------
-  // 4. 禁用右键（PC）
+  // 6. 禁用右键（PC）
   // -------------------------------
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -151,7 +185,7 @@
   });
 
   // -------------------------------
-  // 5. 禁止选中（PC）
+  // 7. 禁止选中（PC）
   // -------------------------------
   document.addEventListener("selectstart", (e) => e.preventDefault());
   document.addEventListener("mousedown", (e) => {
