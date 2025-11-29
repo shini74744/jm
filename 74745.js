@@ -23,7 +23,6 @@
   if (isMobile) {
     console.log("移动端访问：启用图片长按禁用");
 
-    // iOS Safari：禁用长按弹出“存储图像/复制”等菜单 + 禁拖拽（轻量）
     const style = document.createElement("style");
     style.innerHTML = `
       img {
@@ -36,7 +35,7 @@
     `;
     document.head.appendChild(style);
 
-    // Android/Chrome 等：拦截长按触发的 contextmenu（捕获阶段更稳）
+    // 拦截长按触发的菜单（捕获阶段更稳）
     document.addEventListener(
       "contextmenu",
       (e) => {
@@ -52,9 +51,9 @@
   }
 
   // =====================================================================
-  // ✅ PC：A + B（降误判版）
-  // - A(resize) 不再直接跳转，只用来更新尺寸/辅助
-  // - B(outer/inner) 连续命中 >=2 次才跳转，避免窗口化误触
+  // ✅ PC：防护（降误判版）
+  // - resize：不直接跳转，只用于更新基线
+  // - DevTools：用“基线 + 增量”判断，避免一进站就误判
   // =====================================================================
 
   // -------------------------------
@@ -74,33 +73,46 @@
   });
 
   // -------------------------------
-  // 2A. resize（不再“判死刑”跳转，避免窗口化/拖拽误触）
+  // 2. DevTools 检测（基线 + 增量）
   // -------------------------------
-  let lastWidth = window.innerWidth;
-  let lastHeight = window.innerHeight;
+  let baseDiffH = null;
+  let baseDiffW = null;
 
+  function sampleBaseline() {
+    const diffH = Math.abs(window.outerHeight - window.innerHeight);
+    const diffW = Math.abs(window.outerWidth - window.innerWidth);
+    baseDiffH = diffH;
+    baseDiffW = diffW;
+  }
+
+  // 首次进入延迟采样（等浏览器 UI 稳定）
+  setTimeout(sampleBaseline, 800);
+
+  // 窗口变化后也更新基线（避免窗口化/拖动后误判）
+  let baselineTimer = null;
   window.addEventListener("resize", () => {
-    // 仅更新记录，保留扩展空间（比如你未来想上报日志/计数）
-    lastWidth = window.innerWidth;
-    lastHeight = window.innerHeight;
+    clearTimeout(baselineTimer);
+    baselineTimer = setTimeout(sampleBaseline, 800);
   });
 
-  // -------------------------------
-  // 2B. outer/inner 检测：连续命中才跳转（核心降误判）
-  // -------------------------------
-  function isDevtoolsOpen() {
-    const threshold = 170;
-    // 有些浏览器 outer 值异常，做个健壮性保护
+  function isDevtoolsOpenByDelta() {
+    if (baseDiffH === null || baseDiffW === null) return false;
+
+    // outer 在个别环境可能为 0/undefined，兜底
     if (!window.outerHeight || !window.outerWidth) return false;
 
-    return (
-      Math.abs(window.outerHeight - window.innerHeight) > threshold ||
-      Math.abs(window.outerWidth - window.innerWidth) > threshold
-    );
+    const diffH = Math.abs(window.outerHeight - window.innerHeight);
+    const diffW = Math.abs(window.outerWidth - window.innerWidth);
+
+    const deltaH = diffH - baseDiffH;
+    const deltaW = diffW - baseDiffW;
+
+    // 只看“增量”而不是绝对值，极大降低开局误判
+    return deltaH > 220 || deltaW > 220;
   }
 
   let devtoolsHit = 0;
-  const HIT_NEED = 2; // 连续 2 次命中才处理（500ms*2=1秒）
+  const HIT_NEED = 2; // 连续命中 2 次（约 1s）才处理
 
   function punish() {
     alert("检测到开发者工具已打开！");
@@ -108,14 +120,14 @@
   }
 
   setInterval(() => {
-    if (isDevtoolsOpen()) devtoolsHit++;
+    if (isDevtoolsOpenByDelta()) devtoolsHit++;
     else devtoolsHit = 0;
 
     if (devtoolsHit >= HIT_NEED) punish();
   }, 500);
 
   // -------------------------------
-  // 3. 反调试 (PC)（保留你的逻辑：注意它可能带来性能影响）
+  // 3. 反调试 (PC)（保留你的逻辑：可能有性能影响）
   // -------------------------------
   function antiDebug() {
     setInterval(() => {
