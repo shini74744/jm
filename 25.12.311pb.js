@@ -92,7 +92,6 @@
   } catch (_) {}
 
   function getDiff() {
-    // 改为使用更稳定的 innerWidth 和 innerHeight
     return {
       h: Math.abs(window.innerHeight - window.outerHeight),
       w: Math.abs(window.innerWidth - window.outerWidth),
@@ -130,12 +129,12 @@
     if (baseline) return;
 
     // 页面稳定后再采样（UI、字体、布局，避免初始抖动）
-    await new Promise((r) => setTimeout(r, 1100));
+    await new Promise((r) => setTimeout(r, 1500)); // 延迟更多时间确保页面稳定
 
     const samples = [];
     for (let i = 0; i < 7; i++) {
       samples.push(getDiff());
-      await new Promise((r) => setTimeout(r, 180)); // 每次采样间隔增加，减少过早学习
+      await new Promise((r) => setTimeout(r, 250)); // 每次采样间隔更长，减少过早学习
     }
 
     const hs = samples.map((s) => s.h);
@@ -163,12 +162,12 @@
 
   // resize 后不重学，只延迟检测启用，避免窗口化瞬间误判
   let devtoolsCheckEnabled = false;
-  let enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 2000); // 延迟启用检查
+  let enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 2500); // 增加更多的延迟
 
   window.addEventListener("resize", () => {
     devtoolsCheckEnabled = false;
     clearTimeout(enableTimer);
-    enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 2000); // 增加检测延迟
+    enableTimer = setTimeout(() => (devtoolsCheckEnabled = true), 2500); // 增加检测延迟
 
     // 如果用户主动大幅调整窗口，我们不自动重学（避免“学坏”）
     // 需要重学可用 ?reset_baseline=1
@@ -184,8 +183,8 @@
     const deltaH = d.h - baseline.baseH;
     const deltaW = d.w - baseline.baseW;
 
-    const thH = 250 + Math.min(baseline.jitterH || 0, 100); // 增大阈值，防止误判
-    const thW = 250 + Math.min(baseline.jitterW || 0, 100); // 增大阈值，防止误判
+    const thH = 300 + Math.min(baseline.jitterH || 0, 150); // 增加阈值，防止误判
+    const thW = 300 + Math.min(baseline.jitterW || 0, 150); // 增加阈值，防止误判
 
     return deltaH > thH || deltaW > thW;
   }
@@ -193,8 +192,8 @@
   // 补充：开局已打开 DevTools 的“绝对差值 + 比例”保守检测（不依赖 baseline）
   function isDevtoolsOpenAbs() {
     const d = getDiff();
-    const byH = d.h > 400 && d.hRatio < 0.8; // 增加最小差值
-    const byW = d.w > 400 && d.wRatio < 0.8; // 增加最小差值
+    const byH = d.h > 500 && d.hRatio < 0.8; // 增加最小差值
+    const byW = d.w > 500 && d.wRatio < 0.8; // 增加最小差值
     return byH || byW;
   }
 
